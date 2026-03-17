@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPCHPM - Sistema de Control y Avance</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        :root { 
+            --vino: #630330; 
+            --oro: #d4af37; 
+            --verde: #2e7d32; 
+            --gris: #f8f9fa;
+        }
+
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #e9ecef; margin: 0; padding: 10px; }
+        
+        .no-print { 
+            background: white; 
+            padding: 15px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            display: flex; 
+            gap: 10px; 
+            flex-wrap: wrap; 
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #reporte-area { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 5px; 
+            max-width: 900px; 
+            margin: auto; 
+            border-top: 10px solid var(--vino);
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .stat-box {
+            background: var(--gris);
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .progress-wrapper { background: #eee; height: 30px; border-radius: 15px; overflow: hidden; margin: 15px 0; border: 1px solid #ccc; }
+        #bar { 
+            height: 100%; 
+            width: 0%; 
+            background: #ff9800; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: white; 
+            font-weight: bold; 
+            transition: 0.5s ease;
+        }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { background: var(--vino); color: white; padding: 8px; text-transform: uppercase; }
+        td { border-bottom: 1px solid #dee2e6; padding: 6px; }
+        
+        input, select { padding: 6px; border-radius: 4px; border: 1px solid #ccc; width: 100%; box-sizing: border-box; }
+        input[type="checkbox"] { width: auto; transform: scale(1.3); }
+
+        .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; }
+        .btn-vino { background: var(--vino); }
+        .btn-sync { background: #27ae60; }
+        .btn-pdf { background: #2980b9; }
+        .btn-danger { background: #c0392b; }
+
+        .legal-notice {
+            margin-top: 15px;
+            padding: 10px;
+            background: #fff3f3;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            font-size: 11px;
+            border-radius: 5px;
+        }
+
+        .firma-espacio { margin-top: 40px; display: flex; justify-content: flex-end; }
+        .firma-box { border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="no-print">
+    <select id="sel-alumno" onchange="cargarEstudiante()" style="width: 200px;">
+        <option value="">-- Seleccionar Alumno --</option>
+    </select>
+    <input type="text" id="in-nombre" placeholder="Nombre Alumno" style="width: 150px;">
+    <input type="text" id="in-inst" placeholder="Instructor" style="width: 120px;">
+    <button class="btn btn-vino" onclick="agregarAlumno()">+ Agregar</button>
+    <button class="btn btn-sync" onclick="importarDesdeNube()">🔄 Sincronizar Nube</button>
+    <button class="btn btn-pdf" id="btn-pdf" style="display:none;" onclick="descargarPDF()">PDF</button>
+    <button class="btn btn-danger" id="btn-borrar" style="display:none;" onclick="eliminarEstudiante()">Borrar</button>
+</div>
+
+<div id="reporte-area" style="display:none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--vino); padding-bottom: 10px;">
+        <div>
+            <h2 style="color:var(--vino); margin:0;">SPCHPM</h2>
+            <small>Sistema de Control Escolar Profesional</small>
+        </div>
+        <h3 id="msg-aprobado" style="color:var(--verde); margin:0; display:none;">CERTIFICADO: APROBADO</h3>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; padding: 10px; background: var(--gris); border-radius: 5px;">
+        <div><strong>Estudiante:</strong> <span id="res-nombre"></span></div>
+        <div style="text-align: right;"><strong>Instructor:</strong> <span id="res-inst"></span></div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-box"><strong>Asistencias</strong><br><span id="res-asistencias" style="font-size:18px; color:var(--verde); font-weight:bold;">0</span> / 30</div>
+        <div class="stat-box"><strong>Ausencias</strong><br><span id="res-ausencias" style="font-size:18px; color:#c0392b; font-weight:bold;">0</span></div>
+        <div class="stat-box"><strong>Vehículos</strong><br><small id="res-detalles-vehi"></small></div>
+    </div>
+
+    <div class="progress-wrapper"><div id="bar">0%</div></div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width:5%">N°</th>
+                <th style="width:15%">Fecha</th>
+                <th style="width:15%">Vehículo</th>
+                <th style="width:10%">Hecho</th>
+                <th>Ruta / Observaciones</th>
+            </tr>
+        </thead>
+        <tbody id="filas-clases"></tbody>
+    </table>
+
+    <div id="legal-section" class="legal-notice" style="display:none;">
+        <strong>ADVERTENCIA LEGAL:</strong> Según Res. 010-DIR-2015-ANT: El alumno debe cumplir mínimo el 90% de horas prácticas. Con 3 o más ausencias no aprobará el curso.
+    </div>
+
+    <div class="firma-espacio"><div class="firma-box">Firma del Instructor</div></div>
+</div>
+
+<script>
+    // URL PROPORCIONADA
+    const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbzwoljmN45KRrV8QByCBiGvAfZl3QPEbEoxtoIXKdM24P2c0f0TjIy78KdMdZaTF0sJwA/exec";
+    
+    let db = JSON.parse(localStorage.getItem('escuela_db_vFinal')) || {};
+
+    // DESCARGAR DATOS DESDE GOOGLE
+    async function importarDesdeNube() {
+        const btn = event.target;
+        btn.innerText = "⏳ Cargando...";
+        try {
+            const response = await fetch(URL_APPS_SCRIPT);
+            const data = await response.json();
+            db = Object.assign(db, data);
+            localStorage.setItem('escuela_db_vFinal', JSON.stringify(db));
+            actualizarLista();
+            alert("✅ Sincronización Exitosa: Se han cargado los datos desde la nube.");
+        } catch (error) {
+            alert("❌ Error: No se pudo conectar con la nube. Verifica los permisos del Apps Script.");
+        }
+        btn.innerText = "🔄 Sincronizar Nube";
+    }
+
+    function agregarAlumno() {
+        let n = document.getElementById('in-nombre').value.trim();
+        let i = document.getElementById('in-inst').value.trim();
+        if(!n || !i) return alert("Llena nombre e instructor.");
+        db[n] = { instructor: i, clases: Array(30).fill().map(() => ({ fecha: '', vehiculo: 'Camion', done: false, obs: '' })) };
+        sincronizar(n);
+        actualizarLista();
+        document.getElementById('in-nombre').value = '';
+    }
+
+    function actualizarLista() {
+        let s = document.getElementById('sel-alumno');
+        s.innerHTML = '<option value="">-- Seleccionar Alumno --</option>';
+        Object.keys(db).sort().forEach(n => s.innerHTML += `<option value="${n}">${n}</option>`);
+    }
+
+    function cargarEstudiante() {
+        let n = document.getElementById('sel-alumno').value;
+        if(!n) { document.getElementById('reporte-area').style.display='none'; return; }
+        document.getElementById('reporte-area').style.display='block';
+        document.getElementById('btn-borrar').style.display='inline-block';
+        document.getElementById('btn-pdf').style.display='inline-block';
+        document.getElementById('res-nombre').innerText = n;
+        document.getElementById('res-inst').innerText = db[n].instructor;
+        pintarTabla(n);
+    }
+
+    function pintarTabla(n) {
+        let tbody = document.getElementById('filas-clases');
+        tbody.innerHTML = '';
+        let asist = 0;
+        let v = { Camion: 0, Bus: 0, Trailer: 0, Cabezal: 0 };
+        
+        db[n].clases.forEach((c, i) => {
+            if(c.done) { asist++; v[c.vehiculo]++; }
+            tbody.innerHTML += `<tr>
+                <td>${i+1}</td>
+                <td><input type="date" value="${c.fecha}" onchange="guardarCambio('${n}',${i},'fecha',this.value)"></td>
+                <td><select onchange="guardarCambio('${n}',${i},'vehiculo',this.value)">
+                    <option ${c.vehiculo=='Camion'?'selected':''}>Camion</option>
+                    <option ${c.vehiculo=='Bus'?'selected':''}>Bus</option>
+                    <option ${c.vehiculo=='Trailer'?'selected':''}>Trailer</option>
+                    <option ${c.vehiculo=='Cabezal'?'selected':''}>Cabezal</option>
+                </select></td>
+                <td align="center"><input type="checkbox" ${c.done?'checked':''} onchange="guardarCambio('${n}',${i},'done',this.checked)"></td>
+                <td><input type="text" value="${c.obs}" onchange="guardarCambio('${n}',${i},'obs',this.value)"></td>
+            </tr>`;
+        });
+        
+        document.getElementById('res-asistencias').innerText = asist;
+        document.getElementById('res-ausencias').innerText = 30 - asist;
+        document.getElementById('res-detalles-vehi').innerText = `C:${v.Camion} B:${v.Bus} T:${v.Trailer} K:${v.Cabezal}`;
+        document.getElementById('legal-section').style.display = (30-asist >= 3) ? 'block' : 'none';
+
+        let p = Math.round((asist/30)*100);
+        document.getElementById('bar').style.width = p + '%';
+        document.getElementById('bar').innerText = p + '%';
+        document.getElementById('msg-aprobado').style.display = (p==100) ? 'block' : 'none';
+    }
+
+    function guardarCambio(n, idx, campo, valor) {
+        db[n].clases[idx][campo] = valor;
+        localStorage.setItem('escuela_db_vFinal', JSON.stringify(db));
+        pintarTabla(n);
+        sincronizar(n);
+    }
+
+    function eliminarEstudiante() {
+        let n = document.getElementById('sel-alumno').value;
+        if(!confirm("¿Eliminar a " + n + "?")) return;
+        fetch(URL_APPS_SCRIPT, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ alumno: n, accion: "borrar" }) });
+        delete db[n];
+        localStorage.setItem('escuela_db_vFinal', JSON.stringify(db));
+        actualizarLista();
+        document.getElementById('reporte-area').style.display='none';
+    }
+
+    function sincronizar(n) {
+        fetch(URL_APPS_SCRIPT, { 
+            method: 'POST', 
+            mode: 'no-cors', 
+            body: JSON.stringify({ alumno: n, instructor: db[n].instructor, clases: db[n].clases }) 
+        });
+    }
+
+    function descargarPDF() {
+        const element = document.getElementById('reporte-area');
+        html2pdf().from(element).save(`Reporte_${document.getElementById('sel-alumno').value}.pdf`);
+    }
+
+    actualizarLista();
+</script>
+</body>
+</html>
